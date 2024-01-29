@@ -17,4 +17,5 @@ export async function uploadFile(formdata: FormData) {
       body: chunk,
     });
   }
+  console.log("done");
 }
