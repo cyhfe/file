@@ -11,11 +11,20 @@ export async function uploadFile(formdata: FormData) {
     chunks.push(chunk);
   }
 
+  const uploadPromises = [];
+
   for (const chunk of chunks) {
-    const res = await fetch(process.env.BASE_URL + "api/chunk", {
+    const chunkPromise = fetch(process.env.BASE_URL + "api/chunk", {
       method: "POST",
-      body: chunk,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ chunk }),
     });
+
+    uploadPromises.push(chunkPromise);
   }
+
+  await Promise.all(uploadPromises);
   console.log("done");
 }
