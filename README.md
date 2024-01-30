@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+1. 上传文件
 
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```tsx
+// app/page.ts
+import { uploadFile } from "./actions";
+export default function Home() {
+  return (
+    <form action={uploadFile}>
+      <input type="file" name="file" id="file" />
+      <button type="submit">submit</button>
+    </form>
+  );
+}
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. server action 获取文件，切成固定大小，每个 chunk 交给无服务器函数处理
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```tsx
+// app/actions.ts
+"use server";
+export async function uploadFile(formdata: FormData) {
+  const start = Date.now();
+  const file = formdata.get("file") as File;
+  const chunkSize = 1024 * 1024;
+  const chunks = await createChunks(file, chunkSize);
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+  const chunkPromises = [];
+  for (const chunk of chunks) {
+    const chunkPromise = fetch(process.env.BASE_URL + "api/chunk", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ chunk }),
+    });
 
-## Learn More
+    chunkPromises.push(chunkPromise);
+  }
 
-To learn more about Next.js, take a look at the following resources:
+  await Promise.all(chunkPromises);
+  console.log(
+    "file size: " + file.size + " cost: " + (Date.now() - start) + "ms"
+  );
+}
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+async function createChunks(file: File, chunkSize: number) {
+  const chunks = [];
+  let start = 0;
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+  while (start < file.size) {
+    const chunk = Buffer.from(
+      await file.slice(start, start + chunkSize).arrayBuffer()
+    ).toString("utf-8");
 
-## Deploy on Vercel
+    chunks.push(chunk);
+    start += chunkSize;
+  }
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+  return chunks;
+}
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+3. 无服务器函数可以并行处理固定大小的 chunk，所以总时间是恒定的。
+
+```tsx
+import { NextRequest, NextResponse } from "next/server";
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function POST(request: NextRequest) {
+  const chunk = await request.json();
+  // handle chunk
+  await sleep(5000);
+  return NextResponse.json("ok");
+}
+```
