@@ -1,6 +1,5 @@
 "use server";
 export async function uploadFile(formdata: FormData) {
-  console.log("start upload");
   const start = Date.now();
   const file = formdata.get("file") as File;
   const chunkSize = 1024 * 1024;
