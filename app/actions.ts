@@ -1,18 +1,11 @@
 "use server";
 export async function uploadFile(formdata: FormData) {
+  const start = Date.now();
   const file = formdata.get("file") as File;
   const chunkSize = 1024 * 1024;
-  const ab = await file.arrayBuffer();
-  const buffer = Buffer.from(ab);
-  const data = buffer.toString("utf-8");
-  const chunks = [];
-  for (let i = 0; i < buffer.length; i += chunkSize) {
-    const chunk = data.slice(i, i + chunkSize);
-    chunks.push(chunk);
-  }
+  const chunks = await createChunks(file, chunkSize);
 
-  const uploadPromises = [];
-
+  const chunkPromises = [];
   for (const chunk of chunks) {
     const chunkPromise = fetch(process.env.BASE_URL + "api/chunk", {
       method: "POST",
@@ -22,9 +15,27 @@ export async function uploadFile(formdata: FormData) {
       body: JSON.stringify({ chunk }),
     });
 
-    uploadPromises.push(chunkPromise);
+    chunkPromises.push(chunkPromise);
   }
 
-  await Promise.all(uploadPromises);
-  console.log("done");
+  await Promise.all(chunkPromises);
+  console.log(
+    "file size: " + file.size + " cost: " + (Date.now() - start) + "ms"
+  );
+}
+
+async function createChunks(file: File, chunkSize: number) {
+  const chunks = [];
+  let start = 0;
+
+  while (start < file.size) {
+    const chunk = Buffer.from(
+      await file.slice(start, start + chunkSize).arrayBuffer()
+    ).toString("utf-8");
+
+    chunks.push(chunk);
+    start += chunkSize;
+  }
+
+  return chunks;
 }
